@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -90,15 +92,98 @@ func (c TextJoinerConfig) GetDisplayName() string {
 
 // PipelineStep représente une étape dans le pipeline
 type PipelineStep struct {
-	ID     string     // Identifiant unique de l'étape
-	Config ToolConfig // Configuration de l'outil
-	Name   string     // Nom personnalisé de l'étape
+	ID        string      `json:"id"`
+	Type      ToolType    `json:"type"`
+	Config    interface{} `json:"config"`
+	Name      string      `json:"name"`
+	Processor Processor   `json:"-"`
+}
+
+// Variable globale du pipeline actuel
+var CurrentPipeline = &Pipeline{
+	Name:  "Mon Pipeline",
+	Steps: []PipelineStep{},
 }
 
 // Pipeline représente une séquence d'outils configurés
 type Pipeline struct {
-	Steps []PipelineStep
-	Name  string
+	Steps []PipelineStep `json:"steps"`
+	Name  string         `json:"name"`
+}
+
+type pipelineStepJSON struct {
+	ID     string          `json:"id"`
+	Type   ToolType        `json:"type"`
+	Config json.RawMessage `json:"config"`
+	Name   string          `json:"name"`
+}
+
+// SaveToFile sauvegarde le pipeline dans un fichier JSON
+func (p *Pipeline) SaveToFile(path string) error {
+	data, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return fmt.Errorf("échec de la sérialisation : %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("échec de l'écriture du fichier : %w", err)
+	}
+	return nil
+}
+
+// LoadFromFile charge un pipeline depuis un fichier JSON
+func (p *Pipeline) LoadFromFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("échec de la lecture du fichier : %w", err)
+	}
+
+	var temp struct {
+		Steps []pipelineStepJSON `json:"steps"`
+		Name  string             `json:"name"`
+	}
+
+	if err := json.Unmarshal(data, &temp); err != nil {
+		return fmt.Errorf("échec du décodage JSON : %w", err)
+	}
+
+	p.Name = temp.Name
+	p.Steps = make([]PipelineStep, len(temp.Steps))
+
+	for i, step := range temp.Steps {
+		var config ToolConfig
+		var processor Processor
+
+		switch step.Type {
+		case JSONFormatterTool:
+			config = &JSONFormatterConfig{}
+			processor = NewJSONFormatterUI()
+		case TextSplitterTool:
+			config = &TextSplitterConfig{}
+			processor = NewTextSplitterUI()
+		case TextJoinerTool:
+			config = &TextJoinerConfig{}
+			processor = NewTextJoinerUI()
+		default:
+			return fmt.Errorf("type d'outil inconnu: %s", step.Type)
+		}
+
+		if err := json.Unmarshal(step.Config, config); err != nil {
+			return fmt.Errorf("erreur de configuration pour l'étape %d: %w", i+1, err)
+		}
+
+		if err := processor.ViewModel().LoadConfiguration(config); err != nil {
+			return fmt.Errorf("chargement configuration étape %d: %w", i+1, err)
+		}
+
+		p.Steps[i] = PipelineStep{
+			ID:        step.ID,
+			Processor: processor,
+			Name:      step.Name,
+		}
+	}
+
+	return nil
 }
 
 // Validate valide la configuration complète du pipeline
@@ -106,13 +191,13 @@ func (p *Pipeline) Validate() error {
 	if len(p.Steps) == 0 {
 		return fmt.Errorf("le pipeline doit contenir au moins une étape")
 	}
-	
+
 	for i, step := range p.Steps {
-		if err := step.Config.Validate(); err != nil {
+		if err := step.Processor.ViewModel().Validate(); err != nil {
 			return fmt.Errorf("erreur à l'étape %d (%s): %w", i+1, step.Name, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -122,31 +207,19 @@ func (p *Pipeline) GetDisplaySteps() []string {
 	for i, step := range p.Steps {
 		stepName := step.Name
 		if stepName == "" {
-			stepName = step.Config.GetDisplayName()
+			stepName = step.Processor.Name()
 		}
 		steps = append(steps, fmt.Sprintf("%d. %s", i+1, stepName))
 	}
 	return steps
 }
 
-// ProcessorFunc type de fonction pour traiter le texte
-type ProcessorFunc func(input string, config ToolConfig) (string, error)
-
 // PipelineExecutor exécute un pipeline sur un texte d'entrée
-type PipelineExecutor struct {
-	processors map[ToolType]ProcessorFunc
-}
+type PipelineExecutor struct{}
 
 // NewPipelineExecutor crée un nouvel exécuteur de pipeline
 func NewPipelineExecutor() *PipelineExecutor {
-	return &PipelineExecutor{
-		processors: make(map[ToolType]ProcessorFunc),
-	}
-}
-
-// RegisterProcessor enregistre un processeur pour un type d'outil
-func (pe *PipelineExecutor) RegisterProcessor(toolType ToolType, processor ProcessorFunc) {
-	pe.processors[toolType] = processor
+	return &PipelineExecutor{}
 }
 
 // Execute exécute le pipeline sur le texte d'entrée
@@ -154,26 +227,22 @@ func (pe *PipelineExecutor) Execute(pipeline *Pipeline, input string) (string, e
 	if err := pipeline.Validate(); err != nil {
 		return "", fmt.Errorf("pipeline invalide: %w", err)
 	}
-	
+
 	result := input
-	
+
 	for i, step := range pipeline.Steps {
-		processor, exists := pe.processors[step.Config.GetType()]
-		if !exists {
-			return "", fmt.Errorf("processeur non trouvé pour l'outil %s à l'étape %d", step.Config.GetType(), i+1)
-		}
-		
+		vm := step.Processor.ViewModel()
 		var err error
-		result, err = processor(result, step.Config)
+		result, err = vm.Process(result)
 		if err != nil {
 			stepName := step.Name
 			if stepName == "" {
-				stepName = step.Config.GetDisplayName()
+				stepName = step.Processor.Name()
 			}
 			return "", fmt.Errorf("erreur à l'étape %d (%s): %w", i+1, stepName, err)
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -185,7 +254,7 @@ func ProcessJSONFormatter(input string, config ToolConfig) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("configuration invalide pour JSON Formatter")
 	}
-	
+
 	formatter := NewFormatter(jsonConfig.IndentType)
 	return formatter.FormatJSON(input)
 }
@@ -196,12 +265,12 @@ func ProcessTextSplitter(input string, config ToolConfig) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("configuration invalide pour Text Splitter")
 	}
-	
+
 	delimiter := splitterConfig.Delimiter
 	if delimiter == "" {
 		delimiter = "\n"
 	}
-	
+
 	parts := strings.Split(input, delimiter)
 	return strings.Join(parts, "\n"), nil
 }
@@ -212,7 +281,7 @@ func ProcessTextJoiner(input string, config ToolConfig) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("configuration invalide pour Text Joiner")
 	}
-	
+
 	lines := strings.Split(input, "\n")
 	// Filtrer les lignes vides
 	var nonEmptyLines []string
@@ -221,15 +290,11 @@ func ProcessTextJoiner(input string, config ToolConfig) (string, error) {
 			nonEmptyLines = append(nonEmptyLines, strings.TrimSpace(line))
 		}
 	}
-	
+
 	return strings.Join(nonEmptyLines, joinerConfig.Delimiter), nil
 }
 
-// GetDefaultExecutor retourne un exécuteur avec tous les processeurs enregistrés
+// GetDefaultExecutor retourne un exécuteur de pipeline
 func GetDefaultExecutor() *PipelineExecutor {
-	executor := NewPipelineExecutor()
-	executor.RegisterProcessor(JSONFormatterTool, ProcessJSONFormatter)
-	executor.RegisterProcessor(TextSplitterTool, ProcessTextSplitter)
-	executor.RegisterProcessor(TextJoinerTool, ProcessTextJoiner)
-	return executor
+	return NewPipelineExecutor()
 }

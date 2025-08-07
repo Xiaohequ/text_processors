@@ -1,61 +1,70 @@
 package ui
 
 import (
+	"fmt"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
 
-func MakeJSONFormatterUI() fyne.CanvasObject {
-	// Zone de texte pour l'entrée JSON (taille limitée)
+// JSONFormatterUI implémente l'interface Processor pour le formateur JSON
+type JSONFormatterUI struct {
+	viewModel *JSONFormatterViewModel
+}
+
+func NewJSONFormatterUI() Processor {
+	return &JSONFormatterUI{
+		viewModel: NewJSONFormatterViewModel(),
+	}
+}
+
+func (ui *JSONFormatterUI) Name() string {
+	return "Formateur JSON"
+}
+
+func (ui *JSONFormatterUI) Description() string {
+	return "Formate les documents JSON avec indentation personnalisée"
+}
+
+func (ui *JSONFormatterUI) ViewModel() ViewModel {
+	return ui.viewModel
+}
+
+func (ui *JSONFormatterUI) CreateConfigurationUI() fyne.CanvasObject {
 	input := widget.NewMultiLineEntry()
 	input.SetPlaceHolder("Entrez votre JSON mal formaté ici...")
 	input.Wrapping = fyne.TextWrapWord
 	input.Resize(fyne.NewSize(0, 120))
 
-	// Zone de texte pour le résultat formaté
 	output := widget.NewRichTextFromMarkdown("")
 	output.Wrapping = fyne.TextWrapWord
 	output.Scroll = container.ScrollBoth
 
-	var formattedText string
-
-	// Options d'indentation
 	indentOptions := []string{"2 espaces", "4 espaces", "Tabulations"}
-	indentSelect := widget.NewSelect(indentOptions, func(s string) {})
-	indentSelect.SetSelected("2 espaces")
+	indentSelect := widget.NewSelect(indentOptions, func(s string) {
+		ui.viewModel.indentType = s
+	})
+	indentSelect.SetSelected(ui.viewModel.indentType)
 
-	// Bouton de formatage
 	formatBtn := widget.NewButton("Formater", func() {
-		inputText := input.Text
-		if inputText == "" {
-			formattedText = ""
-			output.ParseMarkdown("```\n\n```")
-			return
-		}
-
-		formatter := NewFormatter(indentSelect.Selected)
-		formatted, err := formatter.FormatJSON(inputText)
+		result, err := ui.viewModel.Process(input.Text)
 		if err != nil {
-			formattedText = PrettyValidationError(err)
-			output.ParseMarkdown("```\n" + formattedText + "\n```")
+			output.ParseMarkdown("```\n" + PrettyValidationError(err) + "\n```")
 		} else {
-			formattedText = formatted
-			output.ParseMarkdown("```json\n" + formattedText + "\n```")
+			output.ParseMarkdown("```json\n" + result + "\n```")
 		}
 	})
 
-	// Bouton pour copier le résultat
 	copyBtn := widget.NewButton("Copier", func() {
-		if formattedText != "" {
+		if result, _ := ui.viewModel.GetLastResult(); result != "" {
 			clipboard := fyne.CurrentApp().Driver().AllWindows()[0].Clipboard()
-			clipboard.SetContent(formattedText)
+			clipboard.SetContent(result)
 		}
 	})
 
-	// Rafraîchir le formatage si l'indentation change
 	indentSelect.OnChanged = func(s string) {
-		if input.Text != "" && formattedText != "" {
+		if input.Text != "" {
 			formatBtn.OnTapped()
 		}
 	}
@@ -81,4 +90,63 @@ func MakeJSONFormatterUI() fyne.CanvasObject {
 		nil,
 		output,
 	)
+}
+
+// JSONFormatterViewModel implémente ViewModel pour le formateur JSON
+type JSONFormatterViewModel struct {
+	indentType string
+	lastResult string
+}
+
+func NewJSONFormatterViewModel() *JSONFormatterViewModel {
+	return &JSONFormatterViewModel{
+		indentType: "2 espaces",
+	}
+}
+
+func (vm *JSONFormatterViewModel) Process(input string) (string, error) {
+	if input == "" {
+		vm.lastResult = ""
+		return "", nil
+	}
+
+	formatter := NewFormatter(vm.indentType)
+	formatted, err := formatter.FormatJSON(input)
+	if err != nil {
+		return "", err
+	}
+
+	vm.lastResult = formatted
+	return formatted, nil
+}
+
+func (vm *JSONFormatterViewModel) GetConfiguration() interface{} {
+	return struct {
+		IndentType string
+	}{
+		IndentType: vm.indentType,
+	}
+}
+
+func (vm *JSONFormatterViewModel) LoadConfiguration(config interface{}) error {
+	cfg, ok := config.(struct{ IndentType string })
+	if !ok {
+		return fmt.Errorf("configuration invalide")
+	}
+	vm.indentType = cfg.IndentType
+	return nil
+}
+
+func (vm *JSONFormatterViewModel) Validate() error {
+	validTypes := []string{"2 espaces", "4 espaces", "Tabulations"}
+	for _, valid := range validTypes {
+		if vm.indentType == valid {
+			return nil
+		}
+	}
+	return fmt.Errorf("type d'indentation invalide: %s", vm.indentType)
+}
+
+func (vm *JSONFormatterViewModel) GetLastResult() (string, error) {
+	return vm.lastResult, nil
 }

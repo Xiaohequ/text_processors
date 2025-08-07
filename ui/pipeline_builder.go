@@ -5,16 +5,20 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
 
 // MakePipelineBuilderUI crée l'interface du constructeur de pipeline
 func MakePipelineBuilderUI() fyne.CanvasObject {
-	// Pipeline en cours de construction
-	currentPipeline := &Pipeline{
+	// Variable globale pour le pipeline actuel
+	var CurrentPipeline = &Pipeline{
 		Name:  "Mon Pipeline",
 		Steps: []PipelineStep{},
 	}
+
+	// Pipeline en cours de construction
+	currentPipeline := CurrentPipeline
 
 	// Zone d'affichage des étapes
 	stepsContainer := container.NewVBox()
@@ -49,7 +53,7 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 				stepContainer := container.NewHBox()
 
 				// Numéro et nom de l'étape
-				stepLabel := widget.NewLabel(fmt.Sprintf("%d. %s", i+1, step.Config.GetDisplayName()))
+				stepLabel := widget.NewLabel(fmt.Sprintf("%d. %s", i+1, step.Processor.Name()))
 				stepContainer.Add(stepLabel)
 
 				// Bouton monter
@@ -198,15 +202,59 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 		// Effacer les erreurs précédentes
 		showError(nil)
 
-		// Ajouter l'étape au pipeline
-		step := PipelineStep{
-			ID:     fmt.Sprintf("step_%d", len(currentPipeline.Steps)+1),
-			Config: config,
-			Name:   "",
+		// Create processor instance
+		var processor Processor
+		switch toolSelect.Selected {
+		case "JSON Formatter":
+			processor = NewJSONFormatterUI()
+		case "Text Splitter":
+			processor = NewTextSplitterUI()
+		case "Text Joiner":
+			processor = NewTextJoinerUI()
 		}
 
-		currentPipeline.Steps = append(currentPipeline.Steps, step)
-		updateStepsDisplay()
+		// Declare dialog first
+		var configDialog *dialog.CustomDialog
+
+		// Create dialog content with buttons
+		content := container.NewBorder(
+			nil,
+			container.NewCenter(
+				container.NewHBox(
+					widget.NewButton("Annuler", func() { configDialog.Hide() }),
+					widget.NewButton("Valider", func() {
+						if processor.ViewModel().Validate() == nil {
+							configDialog.Hide()
+							step := PipelineStep{
+								ID:        fmt.Sprintf("step_%d", len(currentPipeline.Steps)+1),
+								Processor: processor,
+								Name:      "",
+							}
+							currentPipeline.Steps = append(currentPipeline.Steps, step)
+							updateStepsDisplay()
+						} else {
+							showError(fmt.Errorf("configuration invalide"))
+						}
+					}),
+				),
+			),
+			nil,
+			nil,
+			processor.CreateConfigurationUI(),
+		)
+
+		// Initialize dialog and show
+		configDialog = dialog.NewCustom(
+			"Configuration du processeur",
+			"Fermer",
+			content,
+			fyne.CurrentApp().Driver().AllWindows()[0],
+		)
+		configDialog.Show()
+
+		// Remove old configuration UI elements
+		configContainer.Objects = nil
+		configContainer.Refresh()
 	})
 
 	// Bouton pour exécuter le pipeline
@@ -256,7 +304,7 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 	})
 
 	// Section de configuration du pipeline
-	configSection := container.NewVBox(
+	configSection := container.NewBorder(
 		widget.NewCard("Configuration du Pipeline", "", container.NewVBox(
 			container.NewHBox(
 				widget.NewLabel("Ajouter un outil:"),
@@ -266,9 +314,9 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 			configContainer,
 			errorLabel, // Zone d'affichage des erreurs
 		)),
-
-		widget.NewCard("Étapes du Pipeline", "", container.NewVBox(
-			container.NewHBox(clearBtn),
+		nil, nil, nil,
+		widget.NewCard("Étapes du Pipeline", "", container.NewBorder(
+			container.NewHBox(clearBtn), nil, nil, nil,
 			container.NewScroll(stepsContainer),
 		)),
 	)

@@ -1,79 +1,134 @@
 package ui
 
 import (
-    "strings"
-    
-    "fyne.io/fyne/v2"
-    "fyne.io/fyne/v2/container"
-    "fyne.io/fyne/v2/widget"
+	"fmt"
+	"strings"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 )
 
-func MakeTextSplitterUI() fyne.CanvasObject {
-    // Zone de texte d'entrée
-    input := widget.NewMultiLineEntry()
-    input.SetPlaceHolder("Entrez le texte à diviser...")
-    input.Wrapping = fyne.TextWrapWord
-    input.Resize(fyne.NewSize(0, 120))
+// TextSplitterUI implémente Processor pour le découpage de texte
+type TextSplitterUI struct {
+	viewModel *TextSplitterViewModel
+}
 
-    // Champ délimiteur
-    delimiter := widget.NewEntry()
-    delimiter.SetPlaceHolder("Délimiteur (ex: ,)")
-    delimiter.SetText(",")
+func NewTextSplitterUI() Processor {
+	return &TextSplitterUI{
+		viewModel: NewTextSplitterViewModel(),
+	}
+}
 
-    // Zone de résultat
-    output := widget.NewMultiLineEntry()
-    output.Wrapping = fyne.TextWrapWord
-    output.MultiLine = true
+func (ui *TextSplitterUI) Name() string {
+	return "Découpeur de Texte"
+}
 
-    var resultText string
+func (ui *TextSplitterUI) Description() string {
+	return "Découpe le texte selon un délimiteur personnalisable"
+}
 
-    // Bouton diviser
-    splitBtn := widget.NewButton("Diviser", func() {
-        inputText := input.Text
-        delimiterText := delimiter.Text
-        
-        if inputText == "" {
-            output.SetText("")
-            resultText = ""
-            return
-        }
+func (ui *TextSplitterUI) ViewModel() ViewModel {
+	return ui.viewModel
+}
 
-        if delimiterText == "" {
-            delimiterText = "\n"
-        }
+func (ui *TextSplitterUI) CreateConfigurationUI() fyne.CanvasObject {
+	input := widget.NewMultiLineEntry()
+	input.SetPlaceHolder("Entrez le texte à découper...")
+	input.Wrapping = fyne.TextWrapWord
+	input.Resize(fyne.NewSize(0, 120))
 
-        parts := strings.Split(inputText, delimiterText)
-        resultText = strings.Join(parts, "\n")
-        output.SetText(resultText)
-    })
+	output := widget.NewMultiLineEntry()
+	output.Wrapping = fyne.TextWrapWord
+	output.Disable()
 
-    // Bouton copier
-    copyBtn := widget.NewButton("Copier", func() {
-        if resultText != "" {
-            clipboard := fyne.CurrentApp().Driver().AllWindows()[0].Clipboard()
-            clipboard.SetContent(resultText)
-        }
-    })
+	delimiterEntry := widget.NewEntry()
+	delimiterEntry.SetPlaceHolder("Délimiteur (laisser vide pour \\n)")
 
-    topSection := container.NewVBox(
-        widget.NewLabel("Texte à diviser:"),
-        input,
-        container.NewHBox(
-            widget.NewLabel("Délimiteur:"),
-            delimiter,
-            splitBtn,
-        ),
-        container.NewHBox(
-            widget.NewLabel("Résultat (une ligne par partie):"),
-            copyBtn,
-        ),
-    )
+	processBtn := widget.NewButton("Découper", func() {
+		result, err := ui.viewModel.Process(input.Text)
+		if err != nil {
+			output.SetText(PrettyValidationError(err))
+		} else {
+			output.SetText(result)
+		}
+	})
 
-    return container.NewBorder(
-        topSection,
-        nil,
-        nil,
-        nil,
-        output,
-    )
+	copyBtn := widget.NewButton("Copier", func() {
+		if result, _ := ui.viewModel.GetLastResult(); result != "" {
+			clipboard := fyne.CurrentApp().Driver().AllWindows()[0].Clipboard()
+			clipboard.SetContent(result)
+		}
+	})
+
+	delimiterEntry.OnChanged = func(s string) {
+		ui.viewModel.delimiter = s
+	}
+
+	topSection := container.NewVBox(
+		widget.NewLabel("Entrée Texte:"),
+		input,
+		container.NewHBox(
+			widget.NewLabel("Délimiteur:"),
+			delimiterEntry,
+			processBtn,
+			copyBtn,
+		),
+		widget.NewLabel("Résultat découpé:"),
+	)
+
+	return container.NewBorder(
+		topSection,
+		nil,
+		nil,
+		nil,
+		container.NewVScroll(output),
+	)
+}
+
+// TextSplitterViewModel implémente ViewModel pour le découpage
+type TextSplitterViewModel struct {
+	delimiter  string
+	lastResult string
+}
+
+func NewTextSplitterViewModel() *TextSplitterViewModel {
+	return &TextSplitterViewModel{
+		delimiter: "\n",
+	}
+}
+
+func (vm *TextSplitterViewModel) Process(input string) (string, error) {
+	delim := vm.delimiter
+	if delim == "" {
+		delim = "\n"
+	}
+
+	parts := strings.Split(input, delim)
+	return strings.Join(parts, "\n"), nil
+}
+
+func (vm *TextSplitterViewModel) GetConfiguration() interface{} {
+	return struct {
+		Delimiter string
+	}{
+		Delimiter: vm.delimiter,
+	}
+}
+
+func (vm *TextSplitterViewModel) LoadConfiguration(config interface{}) error {
+	cfg, ok := config.(struct{ Delimiter string })
+	if !ok {
+		return fmt.Errorf("configuration invalide")
+	}
+	vm.delimiter = cfg.Delimiter
+	return nil
+}
+
+func (vm *TextSplitterViewModel) Validate() error {
+	return nil // Pas de validation nécessaire
+}
+
+func (vm *TextSplitterViewModel) GetLastResult() (string, error) {
+	return vm.lastResult, nil
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"jsonformatter/ui"
+	"text_processors/ui"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -10,7 +10,7 @@ import (
 func main() {
 	myApp := app.New()
 
-	myWindow := myApp.NewWindow("JSON Formatter")
+	myWindow := myApp.NewWindow("Text processors")
 	myWindow.Resize(fyne.NewSize(800, 600))
 
 	content := ui.MakeUI()

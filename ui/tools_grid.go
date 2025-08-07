@@ -23,17 +23,23 @@ func MakeToolsGrid(onToolSelect func(fyne.CanvasObject)) fyne.CanvasObject {
 		{
 			Name:        "JSON Formatter",
 			Description: "Formate et valide du JSON",
-			MakeUI:      MakeJSONFormatterUI,
+			MakeUI: func() fyne.CanvasObject {
+				return NewJSONFormatterUI().CreateConfigurationUI()
+			},
 		},
 		{
 			Name:        "Text Splitter",
 			Description: "Divise du texte selon un délimiteur",
-			MakeUI:      MakeTextSplitterUI,
+			MakeUI: func() fyne.CanvasObject {
+				return NewTextSplitterUI().CreateConfigurationUI()
+			},
 		},
 		{
 			Name:        "Text Joiner",
 			Description: "Joint du texte avec un délimiteur",
-			MakeUI:      MakeTextJoinerUI,
+			MakeUI: func() fyne.CanvasObject {
+				return NewTextJoinerUI().CreateConfigurationUI()
+			},
 		},
 	}
 

@@ -1,4 +1,4 @@
-module jsonformatter
+module text_processors
 
 go 1.22
 
