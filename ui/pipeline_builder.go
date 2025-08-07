@@ -11,13 +11,7 @@ import (
 
 // MakePipelineBuilderUI crée l'interface du constructeur de pipeline
 func MakePipelineBuilderUI() fyne.CanvasObject {
-	// Variable globale pour le pipeline actuel
-	var CurrentPipeline = &Pipeline{
-		Name:  "Mon Pipeline",
-		Steps: []PipelineStep{},
-	}
-
-	// Pipeline en cours de construction
+	// Utiliser la variable globale du pipeline actuel
 	currentPipeline := CurrentPipeline
 
 	// Zone d'affichage des étapes
@@ -223,12 +217,52 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 				container.NewHBox(
 					widget.NewButton("Annuler", func() { configDialog.Hide() }),
 					widget.NewButton("Valider", func() {
+						// D'abord, configurer le processeur avec les valeurs de l'interface
+						var config ToolConfig
+						var toolType ToolType
+						var err error
+
+						switch toolSelect.Selected {
+						case "JSON Formatter":
+							toolType = JSONFormatterTool
+							if jsonIndentSelect.Selected == "" {
+								showError(fmt.Errorf("veuillez sélectionner un type d'indentation"))
+								return
+							}
+							config = JSONFormatterConfig{IndentType: jsonIndentSelect.Selected}
+							err = processor.ViewModel().LoadConfiguration(struct{ IndentType string }{IndentType: jsonIndentSelect.Selected})
+						case "Text Splitter":
+							toolType = TextSplitterTool
+							delimiter := splitterDelimiterEntry.Text
+							if delimiter == "" {
+								delimiter = "\n" // Valeur par défaut
+							}
+							config = TextSplitterConfig{Delimiter: delimiter}
+							err = processor.ViewModel().LoadConfiguration(struct{ Delimiter string }{Delimiter: delimiter})
+						case "Text Joiner":
+							toolType = TextJoinerTool
+							delimiter := joinerDelimiterEntry.Text
+							if delimiter == "" {
+								delimiter = " " // Valeur par défaut
+							}
+							config = TextJoinerConfig{Delimiter: delimiter}
+							err = processor.ViewModel().LoadConfiguration(struct{ Delimiter string }{Delimiter: delimiter})
+						}
+
+						if err != nil {
+							showError(fmt.Errorf("erreur de configuration: %w", err))
+							return
+						}
+
 						if processor.ViewModel().Validate() == nil {
 							configDialog.Hide()
+
 							step := PipelineStep{
 								ID:        fmt.Sprintf("step_%d", len(currentPipeline.Steps)+1),
-								Processor: processor,
+								Type:      toolType,
+								Config:    config,
 								Name:      "",
+								Processor: processor,
 							}
 							currentPipeline.Steps = append(currentPipeline.Steps, step)
 							updateStepsDisplay()
@@ -335,6 +369,10 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 
 	// Initialiser l'affichage des étapes
 	updateStepsDisplay()
+
+	// Effacer les anciens callbacks et enregistrer le nouveau pour les importations
+	ClearPipelineUpdateCallbacks()
+	RegisterPipelineUpdateCallback(updateStepsDisplay)
 
 	// Layout principal
 	return container.NewHSplit(

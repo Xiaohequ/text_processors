@@ -105,6 +105,26 @@ var CurrentPipeline = &Pipeline{
 	Steps: []PipelineStep{},
 }
 
+// Callbacks pour notifier les changements du pipeline
+var pipelineUpdateCallbacks []func()
+
+// RegisterPipelineUpdateCallback enregistre un callback à appeler quand le pipeline est mis à jour
+func RegisterPipelineUpdateCallback(callback func()) {
+	pipelineUpdateCallbacks = append(pipelineUpdateCallbacks, callback)
+}
+
+// ClearPipelineUpdateCallbacks efface tous les callbacks enregistrés
+func ClearPipelineUpdateCallbacks() {
+	pipelineUpdateCallbacks = nil
+}
+
+// NotifyPipelineUpdated notifie tous les callbacks enregistrés que le pipeline a été mis à jour
+func NotifyPipelineUpdated() {
+	for _, callback := range pipelineUpdateCallbacks {
+		callback()
+	}
+}
+
 // Pipeline représente une séquence d'outils configurés
 type Pipeline struct {
 	Steps []PipelineStep `json:"steps"`
@@ -172,12 +192,25 @@ func (p *Pipeline) LoadFromFile(path string) error {
 			return fmt.Errorf("erreur de configuration pour l'étape %d: %w", i+1, err)
 		}
 
-		if err := processor.ViewModel().LoadConfiguration(config); err != nil {
+		// Convertir la configuration ToolConfig vers le format attendu par le ViewModel
+		var vmConfig interface{}
+		switch cfg := config.(type) {
+		case *JSONFormatterConfig:
+			vmConfig = struct{ IndentType string }{IndentType: cfg.IndentType}
+		case *TextSplitterConfig:
+			vmConfig = struct{ Delimiter string }{Delimiter: cfg.Delimiter}
+		case *TextJoinerConfig:
+			vmConfig = struct{ Delimiter string }{Delimiter: cfg.Delimiter}
+		}
+
+		if err := processor.ViewModel().LoadConfiguration(vmConfig); err != nil {
 			return fmt.Errorf("chargement configuration étape %d: %w", i+1, err)
 		}
 
 		p.Steps[i] = PipelineStep{
 			ID:        step.ID,
+			Type:      step.Type,
+			Config:    config,
 			Processor: processor,
 			Name:      step.Name,
 		}
