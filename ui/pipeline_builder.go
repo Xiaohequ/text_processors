@@ -2,11 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"text_processors/ui/processors"
 )
 
 // MakePipelineBuilderUI crée l'interface du constructeur de pipeline
@@ -89,9 +91,18 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 		stepsContainer.Refresh()
 	}
 
+	// Fonction pour obtenir la liste des outils disponibles
+	getToolOptions := func() []string {
+		options := []string{"JSON Formatter", "Text Splitter", "Text Joiner"}
+		// Ajouter les processeurs personnalisés
+		for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
+			options = append(options, "Custom: "+customProc.Name)
+		}
+		return options
+	}
+
 	// Sélecteur d'outil à ajouter
-	toolOptions := []string{"JSON Formatter", "Text Splitter", "Text Joiner"}
-	toolSelect := widget.NewSelect(toolOptions, nil)
+	toolSelect := widget.NewSelect(getToolOptions(), nil)
 	toolSelect.SetSelected("JSON Formatter")
 
 	// Zone de configuration pour l'outil sélectionné
@@ -101,6 +112,8 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 	var jsonIndentSelect *widget.Select
 	var splitterDelimiterEntry *widget.Entry
 	var joinerDelimiterEntry *widget.Entry
+	var customNameEntry *widget.Entry
+	var customScriptEntry *widget.Entry
 
 	// Fonction pour mettre à jour la zone de configuration
 	updateConfigDisplay := func(toolName string) {
@@ -136,6 +149,34 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 				widget.NewLabel("Délimiteur:"),
 				joinerDelimiterEntry,
 			))
+		default:
+			// Vérifier si c'est un processeur personnalisé
+			if strings.HasPrefix(toolName, "Custom: ") {
+				customName := strings.TrimPrefix(toolName, "Custom: ")
+				// Trouver le processeur personnalisé
+				for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
+					if customProc.Name == customName {
+						configContainer.Add(widget.NewLabel("Configuration Processeur Personnalisé:"))
+
+						customNameEntry = widget.NewEntry()
+						customNameEntry.SetText(customProc.Name)
+						customNameEntry.Disable() // Nom en lecture seule
+						configContainer.Add(container.NewHBox(
+							widget.NewLabel("Nom:"),
+							customNameEntry,
+						))
+
+						customScriptEntry = widget.NewEntry()
+						customScriptEntry.SetText(customProc.Script)
+						customScriptEntry.Disable() // Script en lecture seule
+						configContainer.Add(container.NewVBox(
+							widget.NewLabel("Script:"),
+							customScriptEntry,
+						))
+						break
+					}
+				}
+			}
 		}
 
 		configContainer.Refresh()
@@ -184,8 +225,27 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 				Delimiter: joinerDelimiterEntry.Text,
 			}
 		default:
-			showError(fmt.Errorf("veuillez sélectionner un outil"))
-			return
+			// Vérifier si c'est un processeur personnalisé
+			if strings.HasPrefix(toolSelect.Selected, "Custom: ") {
+				customName := strings.TrimPrefix(toolSelect.Selected, "Custom: ")
+				// Trouver le processeur personnalisé
+				for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
+					if customProc.Name == customName {
+						config = CustomProcessorConfig{
+							Name:   customProc.Name,
+							Script: customProc.Script,
+						}
+						break
+					}
+				}
+				if config == nil {
+					showError(fmt.Errorf("processeur personnalisé non trouvé: %s", customName))
+					return
+				}
+			} else {
+				showError(fmt.Errorf("veuillez sélectionner un outil"))
+				return
+			}
 		}
 
 		if err = config.Validate(); err != nil {
@@ -197,14 +257,26 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 		showError(nil)
 
 		// Create processor instance
-		var processor Processor
+		var processor processors.Processor
 		switch toolSelect.Selected {
 		case "JSON Formatter":
-			processor = NewJSONFormatterUI()
+			processor = processors.NewJSONFormatterUI()
 		case "Text Splitter":
-			processor = NewTextSplitterUI()
+			processor = processors.NewTextSplitterUI()
 		case "Text Joiner":
-			processor = NewTextJoinerUI()
+			processor = processors.NewTextJoinerUI()
+		default:
+			// Vérifier si c'est un processeur personnalisé
+			if strings.HasPrefix(toolSelect.Selected, "Custom: ") {
+				customName := strings.TrimPrefix(toolSelect.Selected, "Custom: ")
+				// Trouver le processeur personnalisé
+				for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
+					if customProc.Name == customName {
+						processor = processors.NewCustomProcessor(customProc.Name, customProc.Script)
+						break
+					}
+				}
+			}
 		}
 
 		// Declare dialog first
@@ -247,6 +319,20 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 							}
 							config = TextJoinerConfig{Delimiter: delimiter}
 							err = processor.ViewModel().LoadConfiguration(struct{ Delimiter string }{Delimiter: delimiter})
+						default:
+							// Vérifier si c'est un processeur personnalisé
+							if strings.HasPrefix(toolSelect.Selected, "Custom: ") {
+								toolType = CustomProcessorTool
+								customName := strings.TrimPrefix(toolSelect.Selected, "Custom: ")
+								// Trouver le processeur personnalisé
+								for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
+									if customProc.Name == customName {
+										config = CustomProcessorConfig{Name: customProc.Name, Script: customProc.Script}
+										err = processor.ViewModel().LoadConfiguration(struct{ Name, Script string }{Name: customProc.Name, Script: customProc.Script})
+										break
+									}
+								}
+							}
 						}
 
 						if err != nil {
@@ -369,6 +455,28 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 
 	// Initialiser l'affichage des étapes
 	updateStepsDisplay()
+
+	// Fonction pour rafraîchir la liste des outils
+	refreshToolList := func() {
+		currentSelected := toolSelect.Selected
+		toolSelect.Options = getToolOptions()
+		// Essayer de garder la sélection actuelle si elle existe encore
+		found := false
+		for _, option := range toolSelect.Options {
+			if option == currentSelected {
+				toolSelect.SetSelected(currentSelected)
+				found = true
+				break
+			}
+		}
+		if !found && len(toolSelect.Options) > 0 {
+			toolSelect.SetSelected(toolSelect.Options[0])
+		}
+		toolSelect.Refresh()
+	}
+
+	// Enregistrer le callback pour rafraîchir quand des processeurs personnalisés sont ajoutés
+	GlobalCustomProcessorManager.SetUpdateCallback(refreshToolList)
 
 	// Effacer les anciens callbacks et enregistrer le nouveau pour les importations
 	ClearPipelineUpdateCallbacks()

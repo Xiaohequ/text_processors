@@ -1,4 +1,4 @@
-package ui
+package processors
 
 import "encoding/json"
 
@@ -13,12 +13,12 @@ func PrettyValidationError(err error) string {
 	if err == nil {
 		return ""
 	}
-	
+
 	switch e := err.(type) {
 	case *json.SyntaxError:
 		return "Erreur de syntaxe à la position " + string(e.Offset) + ": " + e.Error()
 	case *json.UnmarshalTypeError:
-		return "Type incorrect à la position " + string(e.Offset) + 
+		return "Type incorrect à la position " + string(e.Offset) +
 			". Attendu: " + e.Type.String() + ", Reçu: " + e.Value
 	default:
 		return "Erreur de validation: " + err.Error()

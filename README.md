@@ -4,11 +4,25 @@ Une application de bureau développée en Go avec Fyne pour le traitement de tex
 
 ## Description de l'application
 
-Text Processors est une suite d'outils de traitement de texte qui offre une interface graphique intuitive pour effectuer des opérations courantes sur du texte et des données JSON. L'application propose actuellement trois outils principaux :
+Text Processors est une suite d'outils de traitement de texte qui offre une interface graphique intuitive pour effectuer des opérations courantes sur du texte et des données JSON. L'application propose plusieurs outils intégrés et la possibilité de créer des processeurs personnalisés :
+
+## Outils intégrés
 
 1. **JSON Formatter** : Formate et valide du JSON avec différentes options d'indentation
 2. **Text Splitter** : Divise du texte selon un délimiteur spécifié
 3. **Text Joiner** : Joint des lignes de texte avec un délimiteur personnalisé
+4. **Pipeline Builder** : Enchaîne plusieurs outils pour créer des workflows complexes
+
+## Processeurs personnalisés
+
+5. **Custom Processors** : Créez vos propres processeurs de texte en JavaScript
+   - Interface intuitive pour créer des processeurs personnalisés
+   - Support complet de JavaScript pour la transformation de texte
+   - Intégration transparente dans les pipelines
+   - Export/Import automatique avec les pipelines
+   - Exemples prédéfinis pour démarrer rapidement
+
+Voir [CUSTOM_PROCESSORS.md](CUSTOM_PROCESSORS.md) pour un guide détaillé.
 
 ## Architecture du projet
 
@@ -19,14 +33,21 @@ text_processors/
 ├── main.go                 # Point d'entrée de l'application
 ├── go.mod                  # Gestion des dépendances Go
 ├── go.sum                  # Checksums des dépendances
-├── jsonformatter.exe       # Exécutable compilé
+├── build/                  # Dossier des artifacts de compilation
+│   └── text_processors.exe
+├── build.ps1               # Script PowerShell pour compiler dans ./build
 └── ui/                     # Package contenant l'interface utilisateur
     ├── app.go              # Interface principale et navigation
-    ├── formatter.go        # Logique de formatage JSON
-    ├── text_joiner.go      # Interface de jointure de texte
-    ├── text_splitter.go    # Interface de division de texte
+    ├── pipeline.go         # Gestion des pipelines et configurations
+    ├── pipeline_builder.go # Interface de construction de pipelines
     ├── tools_grid.go       # Grille de sélection des outils
-    └── validator.go        # Validation et gestion d'erreurs JSON
+    └── processors/         # Package contenant les processeurs de texte
+        ├── processor.go            # Interfaces communes des processeurs
+        ├── json_formatter_ui.go    # Processeur de formatage JSON
+        ├── text_splitter.go        # Processeur de division de texte
+        ├── text_joiner.go          # Processeur de jointure de texte
+        ├── formatter.go            # Logique de formatage JSON
+        └── validator.go            # Validation et gestion d'erreurs JSON
 ```
 
 ### Architecture logicielle
@@ -151,14 +172,16 @@ Pour ajouter un nouvel outil :
 ### 7. Compilation et distribution
 
 ```bash
-# Compilation standard
-go build -o text_processors.exe
+# Via script PowerShell (Windows)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+# Mode release (binaire plus petit)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Release
 
-# Compilation optimisée pour la production
-go build -ldflags="-s -w" -o text_processors.exe
+# Ou directement avec go build
+go build -o build/text_processors.exe .
 
-# Cross-compilation (exemple pour Linux)
-GOOS=linux GOARCH=amd64 go build -o text_processors
+# Cross-compilation (exemple Linux)
+GOOS=linux GOARCH=amd64 go build -o build/text_processors .
 ```
 
 ## Installation et utilisation
@@ -169,15 +192,41 @@ GOOS=linux GOARCH=amd64 go build -o text_processors
 
 ### Compilation
 ```bash
+# Option 1: Script PowerShell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+
+# Option 2: Commande go
 go mod tidy
-go build
+go build -o build/text_processors.exe .
 ```
 
 ### Exécution
 ```bash
-./jsonformatter.exe  # Windows
-./text_processors     # Linux/macOS
+./build/text_processors.exe  # Windows
+./build/text_processors      # Linux/macOS
 ```
+
+## Nouveautés
+
+### Processeurs Personnalisés (Custom Processors)
+La dernière version introduit la possibilité de créer des processeurs personnalisés en JavaScript :
+
+- **Bouton "Add custom processor"** sur la page principale
+- **Interface de création intuitive** avec exemples prédéfinis
+- **Support JavaScript complet** pour la transformation de texte
+- **Intégration dans les pipelines** comme n'importe quel autre outil
+- **Export/Import automatique** avec les configurations de pipeline
+- **Zone de test intégrée** pour valider vos scripts
+
+#### Exemples de processeurs personnalisés :
+- Convertisseur majuscules/minuscules
+- Compteur de mots/caractères
+- Inverseur de texte
+- Extracteur d'emails/URLs
+- Formateur de listes
+- Traitement JSON personnalisé
+
+Consultez [CUSTOM_PROCESSORS.md](CUSTOM_PROCESSORS.md) pour un guide complet.
 
 ## Contribution
 
@@ -187,3 +236,4 @@ Lors de l'ajout de nouvelles fonctionnalités :
 3. Ajouter la validation appropriée
 4. Tester avec différents types d'entrées
 5. Documenter les nouvelles fonctions
+6. Tester l'intégration avec les processeurs personnalisés

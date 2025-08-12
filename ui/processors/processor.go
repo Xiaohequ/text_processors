@@ -1,4 +1,4 @@
-package ui
+package processors
 
 import (
 	"fyne.io/fyne/v2"

@@ -5,15 +5,17 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text_processors/ui/processors"
 )
 
 // ToolType représente le type d'outil dans le pipeline
 type ToolType string
 
 const (
-	JSONFormatterTool ToolType = "json_formatter"
-	TextSplitterTool  ToolType = "text_splitter"
-	TextJoinerTool    ToolType = "text_joiner"
+	JSONFormatterTool   ToolType = "json_formatter"
+	TextSplitterTool    ToolType = "text_splitter"
+	TextJoinerTool      ToolType = "text_joiner"
+	CustomProcessorTool ToolType = "custom_processor"
 )
 
 // ToolConfig interface commune pour toutes les configurations d'outils
@@ -90,13 +92,37 @@ func (c TextJoinerConfig) GetDisplayName() string {
 	return fmt.Sprintf("Text Joiner (Délimiteur: %s)", delimiter)
 }
 
+// CustomProcessorConfig configuration pour le processeur personnalisé
+type CustomProcessorConfig struct {
+	Name   string `json:"name"`
+	Script string `json:"script"`
+}
+
+func (c CustomProcessorConfig) GetType() ToolType {
+	return CustomProcessorTool
+}
+
+func (c CustomProcessorConfig) Validate() error {
+	if c.Name == "" {
+		return fmt.Errorf("le nom du processeur ne peut pas être vide")
+	}
+	if c.Script == "" {
+		return fmt.Errorf("le script ne peut pas être vide")
+	}
+	return nil
+}
+
+func (c CustomProcessorConfig) GetDisplayName() string {
+	return fmt.Sprintf("Custom Processor (%s)", c.Name)
+}
+
 // PipelineStep représente une étape dans le pipeline
 type PipelineStep struct {
-	ID        string      `json:"id"`
-	Type      ToolType    `json:"type"`
-	Config    interface{} `json:"config"`
-	Name      string      `json:"name"`
-	Processor Processor   `json:"-"`
+	ID        string               `json:"id"`
+	Type      ToolType             `json:"type"`
+	Config    interface{}          `json:"config"`
+	Name      string               `json:"name"`
+	Processor processors.Processor `json:"-"`
 }
 
 // Variable globale du pipeline actuel
@@ -172,18 +198,21 @@ func (p *Pipeline) LoadFromFile(path string) error {
 
 	for i, step := range temp.Steps {
 		var config ToolConfig
-		var processor Processor
+		var processor processors.Processor
 
 		switch step.Type {
 		case JSONFormatterTool:
 			config = &JSONFormatterConfig{}
-			processor = NewJSONFormatterUI()
+			processor = processors.NewJSONFormatterUI()
 		case TextSplitterTool:
 			config = &TextSplitterConfig{}
-			processor = NewTextSplitterUI()
+			processor = processors.NewTextSplitterUI()
 		case TextJoinerTool:
 			config = &TextJoinerConfig{}
-			processor = NewTextJoinerUI()
+			processor = processors.NewTextJoinerUI()
+		case CustomProcessorTool:
+			config = &CustomProcessorConfig{}
+			processor = processors.NewCustomProcessor("", "") // Sera configuré après
 		default:
 			return fmt.Errorf("type d'outil inconnu: %s", step.Type)
 		}
@@ -201,6 +230,8 @@ func (p *Pipeline) LoadFromFile(path string) error {
 			vmConfig = struct{ Delimiter string }{Delimiter: cfg.Delimiter}
 		case *TextJoinerConfig:
 			vmConfig = struct{ Delimiter string }{Delimiter: cfg.Delimiter}
+		case *CustomProcessorConfig:
+			vmConfig = struct{ Name, Script string }{Name: cfg.Name, Script: cfg.Script}
 		}
 
 		if err := processor.ViewModel().LoadConfiguration(vmConfig); err != nil {
@@ -288,7 +319,7 @@ func ProcessJSONFormatter(input string, config ToolConfig) (string, error) {
 		return "", fmt.Errorf("configuration invalide pour JSON Formatter")
 	}
 
-	formatter := NewFormatter(jsonConfig.IndentType)
+	formatter := processors.NewFormatter(jsonConfig.IndentType)
 	return formatter.FormatJSON(input)
 }
 

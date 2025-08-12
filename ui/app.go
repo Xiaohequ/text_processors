@@ -50,8 +50,8 @@ func MakeUI() fyne.CanvasObject {
 		mainContent.Refresh()
 	}
 
-	// Bouton retour
-	backBtn = widget.NewButton("← Retour", showToolsGrid)
+	// Bouton retour (utilise une closure pour appeler la version courante de showToolsGrid)
+	backBtn = widget.NewButton("← Retour", func() { showToolsGrid() })
 
 	// Initialiser les boutons
 	exportBtn = widget.NewButton("Export", func() {
@@ -143,9 +143,69 @@ func MakeUI() fyne.CanvasObject {
 		fileDialog.Show()
 	})
 
+	// Boutons pour gérer les processeurs personnalisés
+	addCustomBtn := widget.NewButton("Ajouter un processeur personnalisé", func() {
+		window := fyne.CurrentApp().Driver().AllWindows()[0]
+		CreateAddCustomProcessorDialog(window)
+	})
+	manageCustomBtn := widget.NewButton("Gérer les processeurs personnalisés", func() {
+		window := fyne.CurrentApp().Driver().AllWindows()[0]
+		CreateManageCustomProcessorsDialog(window)
+	})
+
 	// Créer le layout final avec scroll
 	finalContent := container.NewScroll(mainContent)
 	mainContent = container.NewStack(finalContent)
+
+	// Commencer par afficher un split: gauche la grille des processeurs, droite le bouton Pipeline Builder
+	showToolsGridWithCustom := func() {
+		processorsGrid := MakeProcessorsGrid(func(toolUI fyne.CanvasObject) {
+			// Quand un processeur est sélectionné, afficher son UI avec un bouton retour
+			mainContent.Objects = []fyne.CanvasObject{
+				container.NewBorder(
+					container.NewHBox(backBtn),
+					nil,
+					nil,
+					nil,
+					toolUI,
+				),
+			}
+			mainContent.Refresh()
+		})
+
+		// Bouton Pipeline Builder centré
+		pbButton := widget.NewButton("Pipeline Builder", func() {
+			mainContent.Objects = []fyne.CanvasObject{
+				container.NewBorder(
+					container.NewHBox(backBtn),
+					nil,
+					nil,
+					nil,
+					MakePipelineBuilderUI(),
+				),
+			}
+			mainContent.Refresh()
+		})
+		rightPane := container.NewCenter(pbButton)
+
+		// Split horizontal: à gauche la grille, à droite le bouton PB
+		split := container.NewHSplit(processorsGrid, rightPane)
+
+		// Afficher avec la barre supérieure (custom + export/import)
+		mainContent.Objects = []fyne.CanvasObject{
+			container.NewBorder(
+				container.NewHBox(addCustomBtn, manageCustomBtn, widget.NewSeparator(), exportBtn, importBtn),
+				nil,
+				nil,
+				nil,
+				split,
+			),
+		}
+		mainContent.Refresh()
+	}
+
+	// Mettre à jour showToolsGrid pour inclure le bouton custom
+	showToolsGrid = showToolsGridWithCustom
 
 	// Commencer par afficher la grille
 	showToolsGrid()

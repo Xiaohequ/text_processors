@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"text_processors/ui"
 
 	"fyne.io/fyne/v2"
@@ -9,6 +10,11 @@ import (
 
 func main() {
 	myApp := app.New()
+
+	// Charger les processeurs personnalisés depuis conf/ au démarrage
+	if err := ui.GlobalCustomProcessorManager.LoadAll(); err != nil {
+		fmt.Printf("[WARN] Échec du chargement des processeurs personnalisés: %v\n", err)
+	}
 
 	myWindow := myApp.NewWindow("Text processors")
 	myWindow.Resize(fyne.NewSize(800, 600))
