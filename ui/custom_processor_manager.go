@@ -193,8 +193,9 @@ func CreateAddCustomProcessorDialog(parent fyne.Window) {
 	nameEntry := widget.NewEntry()
 	nameEntry.SetPlaceHolder("Nom du processeur (ex: Convertisseur Majuscules)")
 
-	scriptEntry := widget.NewMultiLineEntry()
-	scriptEntry.SetPlaceHolder(`Script JavaScript:
+	// Utiliser le widget avec syntax highlighting
+	scriptEditor := NewCodeEditor()
+	scriptEditor.SetPlaceHolder(`Script JavaScript:
 function process(input) {
     // Votre code ici
     return input.toUpperCase();
@@ -202,8 +203,7 @@ function process(input) {
 
 Ou simplement:
 return input.toUpperCase();`)
-	scriptEntry.Wrapping = fyne.TextWrapWord
-	scriptEntry.Resize(fyne.NewSize(500, 200))
+	scriptEditor.Resize(fyne.NewSize(500, 250))
 
 	// Exemples prédéfinis
 	exampleSelect := widget.NewSelect([]string{
@@ -238,7 +238,7 @@ return lines.map(function(line, index) {
     return (index + 1) + '. ' + line;
 }).join('\\n');`
 		}
-		scriptEntry.SetText(script)
+		scriptEditor.SetText(script)
 	})
 
 	// Zone de test
@@ -249,58 +249,82 @@ return lines.map(function(line, index) {
 	testOutput.Disable()
 	testOutput.Resize(fyne.NewSize(0, 60))
 
+	// Widget pour afficher les erreurs en couleur
+	errorDisplay := widget.NewRichTextFromMarkdown("")
+	errorDisplay.Resize(fyne.NewSize(0, 60))
+	
+	// Fonction pour afficher les messages
+	showMessage := func(text string, isError bool) {
+		if isError {
+			errorDisplay.ParseMarkdown("**<span style='color:red'>" + text + "</span>**")
+		} else {
+			errorDisplay.ParseMarkdown(text)
+		}
+		testOutput.SetText(text)
+	}
+
 	testBtn := widget.NewButton("Tester", func() {
-		if nameEntry.Text == "" || scriptEntry.Text == "" {
-			testOutput.SetText("Erreur: Nom et script requis")
+		if nameEntry.Text == "" || scriptEditor.Text() == "" {
+			showMessage("Erreur: Nom et script requis", true)
 			return
 		}
 
 		// Créer un processeur temporaire pour tester
-		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEntry.Text)
+		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEditor.Text())
 		vm := tempProcessor.ViewModel()
 
 		// Charger la configuration
 		config := struct{ Name, Script string }{
 			Name:   nameEntry.Text,
-			Script: scriptEntry.Text,
+			Script: scriptEditor.Text(),
 		}
 		err := vm.LoadConfiguration(config)
 		if err != nil {
-			testOutput.SetText(fmt.Sprintf("Erreur de configuration: %v", err))
+			showMessage(fmt.Sprintf("Erreur de configuration: %v", err), true)
 			return
 		}
 
 		// Tester avec l'entrée
 		result, err := vm.Process(testInput.Text)
 		if err != nil {
-			testOutput.SetText(fmt.Sprintf("Erreur: %v", err))
+			showMessage(fmt.Sprintf("Erreur: %v", err), true)
 		} else {
-			testOutput.SetText(result)
+			showMessage(result, false)
 		}
 	})
 
-	content := container.NewVBox(
+	// Partie haute du formulaire
+	topPart := container.NewVBox(
 		widget.NewLabel("Créer un Processeur Personnalisé"),
 		widget.NewSeparator(),
-
 		widget.NewLabel("Nom du processeur:"),
 		nameEntry,
-
 		widget.NewLabel("Exemples prédéfinis:"),
 		exampleSelect,
-
 		widget.NewLabel("Script JavaScript:"),
-		container.NewScroll(scriptEntry),
+	)
 
+	// Zone de script avec scroll - forcer la hauteur
+	scriptScroll := container.NewScroll(scriptEditor)
+
+	// Partie basse du formulaire
+	bottomPart := container.NewVBox(
 		widget.NewSeparator(),
 		widget.NewLabel("Test du processeur:"),
-		container.NewHBox(
-			widget.NewLabel("Entrée:"),
-			testInput,
-			testBtn,
-		),
+		widget.NewLabel("Entrée:"),
+		testInput,
+		testBtn,
 		widget.NewLabel("Sortie:"),
-		testOutput,
+		errorDisplay,
+	)
+
+	// Utiliser Border pour contrôler la hauteur du script
+	content := container.NewBorder(
+		topPart,      // top
+		bottomPart,   // bottom
+		nil,          // left
+		nil,          // right
+		scriptScroll, // center - le scroll prendra tout l'espace disponible
 	)
 
 	// Créer les boutons
@@ -309,17 +333,17 @@ return lines.map(function(line, index) {
 			dialog.ShowError(fmt.Errorf("le nom du processeur est requis"), parent)
 			return
 		}
-		if scriptEntry.Text == "" {
+		if scriptEditor.Text() == "" {
 			dialog.ShowError(fmt.Errorf("le script est requis"), parent)
 			return
 		}
 
 		// Valider le script en créant un processeur temporaire
-		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEntry.Text)
+		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEditor.Text())
 		vm := tempProcessor.ViewModel()
 		config := struct{ Name, Script string }{
 			Name:   nameEntry.Text,
-			Script: scriptEntry.Text,
+			Script: scriptEditor.Text(),
 		}
 		err := vm.LoadConfiguration(config)
 		if err != nil {
@@ -334,7 +358,7 @@ return lines.map(function(line, index) {
 		}
 
 		// Ajouter le processeur
-		GlobalCustomProcessorManager.AddProcessor(nameEntry.Text, scriptEntry.Text)
+		GlobalCustomProcessorManager.AddProcessor(nameEntry.Text, scriptEditor.Text())
 
 		// Afficher confirmation
 		dialog.ShowInformation("Succès",
@@ -351,6 +375,13 @@ return lines.map(function(line, index) {
 
 	// Créer et afficher la boîte de dialogue
 	customDialog := dialog.NewCustom("Ajouter un Processeur Personnalisé", "Fermer", finalContent, parent)
-	customDialog.Resize(fyne.NewSize(600, 700))
+
+	// Adapter la taille du dialog à la taille de la fenêtre
+	windowSize := parent.Canvas().Size()
+	// Utiliser 85% de la largeur et 80% de la hauteur de la fenêtre
+	dialogWidth := windowSize.Width * 0.85
+	dialogHeight := windowSize.Height * 0.80
+	customDialog.Resize(fyne.NewSize(dialogWidth, dialogHeight))
+
 	customDialog.Show()
 }

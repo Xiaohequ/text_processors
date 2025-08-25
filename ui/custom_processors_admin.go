@@ -132,7 +132,11 @@ func CreateManageCustomProcessorsDialog(parent fyne.Window) {
 			}
 			list.Refresh()
 		}, parent)
-		d.Resize(fyne.NewSize(600, 500))
+		// Adapter la taille du dialog d'édition à la taille de la fenêtre
+		windowSize := parent.Canvas().Size()
+		dialogWidth := windowSize.Width * 0.7
+		dialogHeight := windowSize.Height * 0.6
+		d.Resize(fyne.NewSize(dialogWidth, dialogHeight))
 		d.Show()
 	})
 
@@ -141,6 +145,12 @@ func CreateManageCustomProcessorsDialog(parent fyne.Window) {
 	content := container.NewBorder(nil, actions, nil, nil, list)
 
 	dlg := dialog.NewCustom("Gérer les processeurs personnalisés", "Fermer", content, parent)
-	dlg.Resize(fyne.NewSize(500, 400))
+	
+	// Adapter la taille du dialog de gestion à la taille de la fenêtre
+	windowSize := parent.Canvas().Size()
+	dialogWidth := windowSize.Width * 0.6
+	dialogHeight := windowSize.Height * 0.5
+	dlg.Resize(fyne.NewSize(dialogWidth, dialogHeight))
+	
 	dlg.Show()
 }

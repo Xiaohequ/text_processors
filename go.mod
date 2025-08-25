@@ -2,14 +2,17 @@ module text_processors
 
 go 1.22
 
-require fyne.io/fyne/v2 v2.6.1
+require (
+	fyne.io/fyne/v2 v2.6.1
+	github.com/alecthomas/chroma/v2 v2.14.0
+	github.com/dop251/goja v0.0.0-20250630131328-58d95d85e994
+)
 
 require (
 	fyne.io/systray v1.11.0 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.11.4 // indirect
-	github.com/dop251/goja v0.0.0-20250630131328-58d95d85e994 // indirect
 	github.com/fredbi/uri v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fyne-io/gl-js v0.1.0 // indirect

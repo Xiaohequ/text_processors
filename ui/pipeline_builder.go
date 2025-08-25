@@ -105,89 +105,6 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 	toolSelect := widget.NewSelect(getToolOptions(), nil)
 	toolSelect.SetSelected("JSON Formatter")
 
-	// Zone de configuration pour l'outil sélectionné
-	configContainer := container.NewVBox()
-
-	// Variables pour les configurations
-	var jsonIndentSelect *widget.Select
-	var splitterDelimiterEntry *widget.Entry
-	var joinerDelimiterEntry *widget.Entry
-	var customNameEntry *widget.Entry
-	var customScriptEntry *widget.Entry
-
-	// Fonction pour mettre à jour la zone de configuration
-	updateConfigDisplay := func(toolName string) {
-		configContainer.Objects = nil
-
-		switch toolName {
-		case "JSON Formatter":
-			configContainer.Add(widget.NewLabel("Configuration JSON Formatter:"))
-			indentOptions := []string{"2 espaces", "4 espaces", "Tabulations"}
-			jsonIndentSelect = widget.NewSelect(indentOptions, nil)
-			jsonIndentSelect.SetSelected("2 espaces")
-			configContainer.Add(container.NewHBox(
-				widget.NewLabel("Indentation:"),
-				jsonIndentSelect,
-			))
-
-		case "Text Splitter":
-			configContainer.Add(widget.NewLabel("Configuration Text Splitter:"))
-			splitterDelimiterEntry = widget.NewEntry()
-			splitterDelimiterEntry.SetPlaceHolder("Délimiteur (ex: ,)")
-			splitterDelimiterEntry.SetText(",")
-			configContainer.Add(container.NewHBox(
-				widget.NewLabel("Délimiteur:"),
-				splitterDelimiterEntry,
-			))
-
-		case "Text Joiner":
-			configContainer.Add(widget.NewLabel("Configuration Text Joiner:"))
-			joinerDelimiterEntry = widget.NewEntry()
-			joinerDelimiterEntry.SetPlaceHolder("Délimiteur (ex: ,)")
-			joinerDelimiterEntry.SetText(", ")
-			configContainer.Add(container.NewHBox(
-				widget.NewLabel("Délimiteur:"),
-				joinerDelimiterEntry,
-			))
-		default:
-			// Vérifier si c'est un processeur personnalisé
-			if strings.HasPrefix(toolName, "Custom: ") {
-				customName := strings.TrimPrefix(toolName, "Custom: ")
-				// Trouver le processeur personnalisé
-				for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
-					if customProc.Name == customName {
-						configContainer.Add(widget.NewLabel("Configuration Processeur Personnalisé:"))
-
-						customNameEntry = widget.NewEntry()
-						customNameEntry.SetText(customProc.Name)
-						customNameEntry.Disable() // Nom en lecture seule
-						configContainer.Add(container.NewHBox(
-							widget.NewLabel("Nom:"),
-							customNameEntry,
-						))
-
-						customScriptEntry = widget.NewEntry()
-						customScriptEntry.SetText(customProc.Script)
-						customScriptEntry.Disable() // Script en lecture seule
-						configContainer.Add(container.NewVBox(
-							widget.NewLabel("Script:"),
-							customScriptEntry,
-						))
-						break
-					}
-				}
-			}
-		}
-
-		configContainer.Refresh()
-	}
-
-	// Initialiser l'affichage de configuration
-	updateConfigDisplay("JSON Formatter")
-
-	// Mettre à jour la configuration quand l'outil change
-	toolSelect.OnChanged = updateConfigDisplay
-
 	// Zone d'affichage des erreurs
 	errorLabel := widget.NewLabel("")
 	errorLabel.Wrapping = fyne.TextWrapWord
@@ -204,57 +121,13 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 
 	// Bouton pour ajouter l'étape au pipeline
 	addStepBtn := widget.NewButton("Ajouter l'étape", func() {
-		var config ToolConfig
-		var err error
-
-		switch toolSelect.Selected {
-		case "JSON Formatter":
-			if jsonIndentSelect.Selected == "" {
-				showError(fmt.Errorf("veuillez sélectionner un type d'indentation"))
-				return
-			}
-			config = JSONFormatterConfig{
-				IndentType: jsonIndentSelect.Selected,
-			}
-		case "Text Splitter":
-			config = TextSplitterConfig{
-				Delimiter: splitterDelimiterEntry.Text,
-			}
-		case "Text Joiner":
-			config = TextJoinerConfig{
-				Delimiter: joinerDelimiterEntry.Text,
-			}
-		default:
-			// Vérifier si c'est un processeur personnalisé
-			if strings.HasPrefix(toolSelect.Selected, "Custom: ") {
-				customName := strings.TrimPrefix(toolSelect.Selected, "Custom: ")
-				// Trouver le processeur personnalisé
-				for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
-					if customProc.Name == customName {
-						config = CustomProcessorConfig{
-							Name:   customProc.Name,
-							Script: customProc.Script,
-						}
-						break
-					}
-				}
-				if config == nil {
-					showError(fmt.Errorf("processeur personnalisé non trouvé: %s", customName))
-					return
-				}
-			} else {
-				showError(fmt.Errorf("veuillez sélectionner un outil"))
-				return
-			}
-		}
-
-		if err = config.Validate(); err != nil {
-			showError(err)
-			return
-		}
-
 		// Effacer les erreurs précédentes
 		showError(nil)
+
+		if toolSelect.Selected == "" {
+			showError(fmt.Errorf("veuillez sélectionner un outil"))
+			return
+		}
 
 		// Create processor instance
 		var processor processors.Processor
@@ -289,59 +162,38 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 				container.NewHBox(
 					widget.NewButton("Annuler", func() { configDialog.Hide() }),
 					widget.NewButton("Valider", func() {
-						// D'abord, configurer le processeur avec les valeurs de l'interface
-						var config ToolConfig
-						var toolType ToolType
-						var err error
+						// Valider la configuration du processeur
+						if processor.ViewModel().Validate() == nil {
+							configDialog.Hide()
 
-						switch toolSelect.Selected {
-						case "JSON Formatter":
-							toolType = JSONFormatterTool
-							if jsonIndentSelect.Selected == "" {
-								showError(fmt.Errorf("veuillez sélectionner un type d'indentation"))
-								return
-							}
-							config = JSONFormatterConfig{IndentType: jsonIndentSelect.Selected}
-							err = processor.ViewModel().LoadConfiguration(struct{ IndentType string }{IndentType: jsonIndentSelect.Selected})
-						case "Text Splitter":
-							toolType = TextSplitterTool
-							delimiter := splitterDelimiterEntry.Text
-							if delimiter == "" {
-								delimiter = "\n" // Valeur par défaut
-							}
-							config = TextSplitterConfig{Delimiter: delimiter}
-							err = processor.ViewModel().LoadConfiguration(struct{ Delimiter string }{Delimiter: delimiter})
-						case "Text Joiner":
-							toolType = TextJoinerTool
-							delimiter := joinerDelimiterEntry.Text
-							if delimiter == "" {
-								delimiter = " " // Valeur par défaut
-							}
-							config = TextJoinerConfig{Delimiter: delimiter}
-							err = processor.ViewModel().LoadConfiguration(struct{ Delimiter string }{Delimiter: delimiter})
-						default:
-							// Vérifier si c'est un processeur personnalisé
-							if strings.HasPrefix(toolSelect.Selected, "Custom: ") {
-								toolType = CustomProcessorTool
-								customName := strings.TrimPrefix(toolSelect.Selected, "Custom: ")
-								// Trouver le processeur personnalisé
-								for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
-									if customProc.Name == customName {
-										config = CustomProcessorConfig{Name: customProc.Name, Script: customProc.Script}
-										err = processor.ViewModel().LoadConfiguration(struct{ Name, Script string }{Name: customProc.Name, Script: customProc.Script})
-										break
+							// Déterminer le type d'outil et la configuration
+							var toolType ToolType
+							var config ToolConfig
+
+							switch toolSelect.Selected {
+							case "JSON Formatter":
+								toolType = JSONFormatterTool
+								config = JSONFormatterConfig{IndentType: "2 espaces"} // Default value
+							case "Text Splitter":
+								toolType = TextSplitterTool  
+								config = TextSplitterConfig{Delimiter: ","} // Default value
+							case "Text Joiner":
+								toolType = TextJoinerTool
+								config = TextJoinerConfig{Delimiter: ", "} // Default value
+							default:
+								// Vérifier si c'est un processeur personnalisé
+								if strings.HasPrefix(toolSelect.Selected, "Custom: ") {
+									toolType = CustomProcessorTool
+									customName := strings.TrimPrefix(toolSelect.Selected, "Custom: ")
+									// Trouver le processeur personnalisé
+									for _, customProc := range GlobalCustomProcessorManager.GetProcessors() {
+										if customProc.Name == customName {
+											config = CustomProcessorConfig{Name: customProc.Name, Script: customProc.Script}
+											break
+										}
 									}
 								}
 							}
-						}
-
-						if err != nil {
-							showError(fmt.Errorf("erreur de configuration: %w", err))
-							return
-						}
-
-						if processor.ViewModel().Validate() == nil {
-							configDialog.Hide()
 
 							step := PipelineStep{
 								ID:        fmt.Sprintf("step_%d", len(currentPipeline.Steps)+1),
@@ -370,11 +222,16 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 			content,
 			fyne.CurrentApp().Driver().AllWindows()[0],
 		)
+		
+		// Adapter la taille du dialog à la taille de la fenêtre
+		window := fyne.CurrentApp().Driver().AllWindows()[0]
+		windowSize := window.Canvas().Size()
+		// Utiliser 80% de la largeur et 70% de la hauteur de la fenêtre
+		dialogWidth := windowSize.Width * 0.8
+		dialogHeight := windowSize.Height * 0.7
+		configDialog.Resize(fyne.NewSize(dialogWidth, dialogHeight))
+		
 		configDialog.Show()
-
-		// Remove old configuration UI elements
-		configContainer.Objects = nil
-		configContainer.Refresh()
 	})
 
 	// Bouton pour exécuter le pipeline
@@ -431,7 +288,6 @@ func MakePipelineBuilderUI() fyne.CanvasObject {
 				toolSelect,
 				addStepBtn,
 			),
-			configContainer,
 			errorLabel, // Zone d'affichage des erreurs
 		)),
 		nil, nil, nil,
