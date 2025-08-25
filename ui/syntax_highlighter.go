@@ -2,9 +2,9 @@ package ui
 
 import (
 	"io"
-	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -94,12 +94,27 @@ func (s *SyntaxHighlightedEntry) Resize(size fyne.Size) {
 
 // CreateRenderer crée le renderer pour ce widget
 func (s *SyntaxHighlightedEntry) CreateRenderer() fyne.WidgetRenderer {
-	// Toujours garder l'entry pour la saisie, même avec syntax highlighting
-	return &syntaxHighlightedRenderer{
-		entry:    s.entry,
-		richText: s.richText,
-		objects:  []fyne.CanvasObject{s.entry},
-		parent:   s,
+	// Utiliser un container Stack avec RichText en arrière-plan et Entry transparent par-dessus
+	if s.showHighlights {
+		// Rendre l'entry transparent pour voir le RichText coloré en dessous
+		s.entry.TextStyle = fyne.TextStyle{Monospace: true}
+		container := container.NewStack(s.richText, s.entry)
+		return &syntaxHighlightedRenderer{
+			entry:     s.entry,
+			richText:  s.richText,
+			container: container,
+			objects:   []fyne.CanvasObject{container},
+			parent:    s,
+		}
+	} else {
+		// Mode normal sans coloration
+		return &syntaxHighlightedRenderer{
+			entry:     s.entry,
+			richText:  s.richText,
+			container: nil,
+			objects:   []fyne.CanvasObject{s.entry},
+			parent:    s,
+		}
 	}
 }
 
@@ -116,7 +131,8 @@ func (s *SyntaxHighlightedEntry) updateHighlighting() {
 	
 	text := s.entry.Text
 	if text == "" {
-		s.richText.ParseMarkdown("")
+		s.richText.Segments = nil
+		s.richText.Refresh()
 		return
 	}
 	
@@ -126,41 +142,61 @@ func (s *SyntaxHighlightedEntry) updateHighlighting() {
 		return
 	}
 	
-	// Construction du texte avec coloration basique
-	var highlighted strings.Builder
+	// Construction des segments avec couleurs réelles
+	var segments []widget.RichTextSegment
 	
 	for token := iterator(); token != chroma.EOF; token = iterator() {
 		value := token.Value
 		tokenType := token.Type
 		
-		// Appliquer des styles basiques selon le type de token
+		// Créer un segment avec style approprié
+		segment := &widget.TextSegment{
+			Text: value,
+			Style: widget.RichTextStyle{
+				TextStyle: fyne.TextStyle{Monospace: true},
+			},
+		}
+		
+		// Appliquer des couleurs selon le type de token
 		switch tokenType {
 		case chroma.Keyword, chroma.KeywordConstant, chroma.KeywordDeclaration, chroma.KeywordNamespace, chroma.KeywordPseudo, chroma.KeywordReserved, chroma.KeywordType:
-			highlighted.WriteString("**" + value + "**") // Gras pour les mots-clés
-		case chroma.String, chroma.StringAffix, chroma.StringBacktick, chroma.StringChar, chroma.StringDelimiter, chroma.StringDoc, chroma.StringDouble, chroma.StringEscape, chroma.StringHeredoc, chroma.StringInterpol, chroma.StringOther, chroma.StringRegex, chroma.StringSingle, chroma.StringSymbol:
-			highlighted.WriteString("*" + value + "*") // Italique pour les chaînes
-		case chroma.Comment, chroma.CommentHashbang, chroma.CommentMultiline, chroma.CommentSingle, chroma.CommentSpecial:
-			highlighted.WriteString("~~" + value + "~~") // Barré pour les commentaires
-		case chroma.Number, chroma.NumberBin, chroma.NumberFloat, chroma.NumberHex, chroma.NumberInteger, chroma.NumberIntegerLong, chroma.NumberOct:
-			highlighted.WriteString("`" + value + "`") // Code pour les nombres
+			segment.Style.ColorName = "primary" // Bleu pour les mots-clés
+			segment.Style.TextStyle.Bold = true
+		case chroma.String, chroma.StringDouble, chroma.StringSingle:
+			segment.Style.ColorName = "success" // Vert pour les chaînes
+		case chroma.Comment, chroma.CommentSingle, chroma.CommentMultiline:
+			segment.Style.ColorName = "disabled" // Gris pour les commentaires
+			segment.Style.TextStyle.Italic = true
+		case chroma.Number, chroma.NumberInteger, chroma.NumberFloat:
+			segment.Style.ColorName = "warning" // Orange pour les nombres
+		case chroma.Punctuation:
+			segment.Style.ColorName = "foreground" // Couleur normale pour la ponctuation
 		default:
-			highlighted.WriteString(value)
+			segment.Style.ColorName = "foreground" // Couleur normale
 		}
+		
+		segments = append(segments, segment)
 	}
 	
-	s.richText.ParseMarkdown(highlighted.String())
+	s.richText.Segments = segments
+	s.richText.Refresh()
 }
 
 // syntaxHighlightedRenderer est le renderer pour le widget
 type syntaxHighlightedRenderer struct {
-	entry    *widget.Entry
-	richText *widget.RichText
-	objects  []fyne.CanvasObject
-	parent   *SyntaxHighlightedEntry
+	entry     *widget.Entry
+	richText  *widget.RichText
+	container *fyne.Container
+	objects   []fyne.CanvasObject
+	parent    *SyntaxHighlightedEntry
 }
 
 func (r *syntaxHighlightedRenderer) Layout(size fyne.Size) {
-	r.entry.Resize(size)
+	if r.container != nil {
+		r.container.Resize(size)
+	} else {
+		r.entry.Resize(size)
+	}
 }
 
 func (r *syntaxHighlightedRenderer) MinSize() fyne.Size {
@@ -189,7 +225,7 @@ func (f *fyneFormatter) Format(w io.Writer, style *chroma.Style, iterator chroma
 func NewCodeEditor() *SyntaxHighlightedEntry {
 	editor := NewSyntaxHighlightedEntry()
 	editor.entry.TextStyle = fyne.TextStyle{Monospace: true}
-	// Désactiver la coloration syntaxique pour le moment car elle interfère avec la saisie
-	// editor.EnableSyntaxHighlighting() 
+	// Activer la coloration syntaxique
+	editor.EnableSyntaxHighlighting() 
 	return editor
 }
