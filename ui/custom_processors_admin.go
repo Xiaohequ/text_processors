@@ -95,7 +95,7 @@ func CreateManageCustomProcessorsDialog(parent fyne.Window) {
 		current := procs[selectedIndex]
 		nameEntry := widget.NewEntry()
 		nameEntry.SetText(current.Name)
-		scriptEntry := NewTogglableCodeEditor()
+		scriptEntry := NewCodeEditor()
 		scriptEntry.SetPlaceHolder("Script JavaScript (fonction process(input) { return input; })")
 		scriptEntry.SetText(current.Script)
 		// UI du dialogue
@@ -110,7 +110,7 @@ func CreateManageCustomProcessorsDialog(parent fyne.Window) {
 				return
 			}
 			newName := nameEntry.Text
-			newScript := scriptEntry.GetText()
+			newScript := scriptEntry.Text()
 			if newName == "" {
 				dialog.ShowError(fmt.Errorf("le nom est requis"), parent)
 				return

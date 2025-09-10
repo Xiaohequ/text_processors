@@ -193,8 +193,8 @@ func CreateAddCustomProcessorDialog(parent fyne.Window) {
 	nameEntry := widget.NewEntry()
 	nameEntry.SetPlaceHolder("Nom du processeur (ex: Convertisseur Majuscules)")
 
-	// Utiliser l'éditeur avec bouton de bascule édition/highlight
-	scriptEditor := NewTogglableCodeEditor()
+	// Utiliser l'éditeur avec coloration syntaxique temps réel
+	scriptEditor := NewCodeEditor() // Utilise SyntaxHighlightedEntry avec coloration active
 	scriptEditor.SetPlaceHolder(`Script JavaScript:
 function process(input) {
     // Votre code ici
@@ -264,19 +264,19 @@ return lines.map(function(line, index) {
 	}
 
 	testBtn := widget.NewButton("Tester", func() {
-		if nameEntry.Text == "" || scriptEditor.GetText() == "" {
+		if nameEntry.Text == "" || scriptEditor.Text() == "" {
 			showMessage("Erreur: Nom et script requis", true)
 			return
 		}
 
 		// Créer un processeur temporaire pour tester
-		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEditor.GetText())
+		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEditor.Text())
 		vm := tempProcessor.ViewModel()
 
 		// Charger la configuration
 		config := struct{ Name, Script string }{
 			Name:   nameEntry.Text,
-			Script: scriptEditor.GetText(),
+			Script: scriptEditor.Text(),
 		}
 		err := vm.LoadConfiguration(config)
 		if err != nil {
@@ -333,17 +333,17 @@ return lines.map(function(line, index) {
 			dialog.ShowError(fmt.Errorf("le nom du processeur est requis"), parent)
 			return
 		}
-		if scriptEditor.GetText() == "" {
+		if scriptEditor.Text() == "" {
 			dialog.ShowError(fmt.Errorf("le script est requis"), parent)
 			return
 		}
 
 		// Valider le script en créant un processeur temporaire
-		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEditor.GetText())
+		tempProcessor := processors.NewCustomProcessor(nameEntry.Text, scriptEditor.Text())
 		vm := tempProcessor.ViewModel()
 		config := struct{ Name, Script string }{
 			Name:   nameEntry.Text,
-			Script: scriptEditor.GetText(),
+			Script: scriptEditor.Text(),
 		}
 		err := vm.LoadConfiguration(config)
 		if err != nil {
@@ -358,7 +358,7 @@ return lines.map(function(line, index) {
 		}
 
 		// Ajouter le processeur
-		GlobalCustomProcessorManager.AddProcessor(nameEntry.Text, scriptEditor.GetText())
+		GlobalCustomProcessorManager.AddProcessor(nameEntry.Text, scriptEditor.Text())
 
 		// Afficher confirmation
 		dialog.ShowInformation("Succès",

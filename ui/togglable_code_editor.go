@@ -18,15 +18,15 @@ type TogglableCodeEditor struct {
 // NewTogglableCodeEditor crée un nouvel éditeur avec bouton de bascule
 func NewTogglableCodeEditor() *TogglableCodeEditor {
 	t := &TogglableCodeEditor{
-		isEditing: true, // Commencer en mode édition
+		isEditing: true, // Commencer en mode édition avec coloration
 	}
 	
 	// Créer l'éditeur RichText
 	t.editor = NewRichCodeEditor()
-	t.editor.EnableEditing() // Commencer en mode édition
+	t.editor.EnableEditing() // Mode édition avec coloration temps réel
 	
 	// Créer le bouton de bascule
-	t.toggleBtn = widget.NewButton("🎨 Voir Couleurs", func() {
+	t.toggleBtn = widget.NewButton("👁️ Lecture Seule", func() {
 		t.toggle()
 	})
 	
@@ -43,17 +43,17 @@ func NewTogglableCodeEditor() *TogglableCodeEditor {
 	return t
 }
 
-// toggle bascule entre mode édition et mode highlight
+// toggle bascule entre mode édition avec coloration et lecture seule
 func (t *TogglableCodeEditor) toggle() {
 	if t.isEditing {
-		// Passer en mode highlight
+		// Passer en mode lecture seule (highlight only)
 		t.editor.EnableHighlighting()
 		t.toggleBtn.SetText("✏️ Éditer")
 		t.isEditing = false
 	} else {
-		// Passer en mode édition
+		// Passer en mode édition avec coloration temps réel
 		t.editor.EnableEditing()
-		t.toggleBtn.SetText("🎨 Voir Couleurs")
+		t.toggleBtn.SetText("👁️ Lecture Seule")
 		t.isEditing = true
 	}
 }

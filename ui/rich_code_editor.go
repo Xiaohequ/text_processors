@@ -32,7 +32,7 @@ func NewRichCodeEditor() *RichCodeEditor {
 	}
 	editor.lexer = chroma.Coalesce(editor.lexer)
 	
-	// Créer l'Entry pour l'édition (invisible en mode highlight)
+	// Créer l'Entry pour l'édition (transparent pour voir le RichText dessous)
 	editor.entry = widget.NewMultiLineEntry()
 	editor.entry.TextStyle = fyne.TextStyle{Monospace: true}
 	editor.entry.Wrapping = fyne.TextWrapOff
@@ -40,16 +40,16 @@ func NewRichCodeEditor() *RichCodeEditor {
 	// Créer le RichText pour l'affichage coloré
 	editor.richText = widget.NewRichText()
 	editor.richText.Wrapping = fyne.TextWrapOff
+	// Synchroniser les styles de texte pour l'alignement
+	editor.richText.Scroll = container.ScrollNone
 	
-	// Synchronisation Entry -> RichText
+	// Synchronisation Entry -> RichText en temps réel
 	editor.entry.OnChanged = func(text string) {
-		if editor.showHighlight {
-			editor.updateSyntaxHighlighting(text)
-		}
+		editor.updateSyntaxHighlighting(text)
 	}
 	
-	// Mode par défaut : affichage RichText uniquement
-	editor.container = container.NewStack(editor.richText)
+	// Mode par défaut : Stack avec RichText en arrière-plan et Entry transparent par-dessus
+	editor.container = container.NewStack(editor.richText, editor.entry)
 	
 	editor.ExtendBaseWidget(editor)
 	
@@ -59,9 +59,7 @@ func NewRichCodeEditor() *RichCodeEditor {
 // SetText définit le texte
 func (r *RichCodeEditor) SetText(text string) {
 	r.entry.SetText(text)
-	if r.showHighlight {
-		r.updateSyntaxHighlighting(text)
-	}
+	r.updateSyntaxHighlighting(text)
 }
 
 // GetText retourne le texte actuel
@@ -87,14 +85,15 @@ func (r *RichCodeEditor) SetPlaceHolder(text string) {
 	}
 }
 
-// EnableEditing active le mode édition (Entry visible)
+// EnableEditing active le mode édition avec coloration temps réel
 func (r *RichCodeEditor) EnableEditing() {
-	r.container.Objects = []fyne.CanvasObject{r.entry}
-	r.showHighlight = false
+	r.showHighlight = true
+	r.updateSyntaxHighlighting(r.entry.Text)
+	r.container.Objects = []fyne.CanvasObject{r.richText, r.entry}
 	r.container.Refresh()
 }
 
-// EnableHighlighting active le mode affichage coloré (RichText visible)
+// EnableHighlighting active le mode affichage coloré seul (sans édition)
 func (r *RichCodeEditor) EnableHighlighting() {
 	r.showHighlight = true
 	r.updateSyntaxHighlighting(r.entry.Text)
@@ -126,9 +125,6 @@ func (r *RichCodeEditor) OnChanged(callback func(string)) {
 
 // updateSyntaxHighlighting met à jour la coloration RichText
 func (r *RichCodeEditor) updateSyntaxHighlighting(text string) {
-	if !r.showHighlight {
-		return
-	}
 	
 	if text == "" {
 		r.richText.Segments = nil
@@ -160,11 +156,13 @@ func (r *RichCodeEditor) updateSyntaxHighlighting(text string) {
 		value := token.Value
 		tokenType := token.Type
 		
-		// Créer un segment avec style approprié
+		// Créer un segment avec style approprié - copier exactement le style de l'Entry
 		segment := &widget.TextSegment{
 			Text: value,
 			Style: widget.RichTextStyle{
-				TextStyle: fyne.TextStyle{Monospace: true},
+				TextStyle: fyne.TextStyle{
+					Monospace: true,
+				},
 			},
 		}
 		
@@ -238,9 +236,8 @@ func (r *RichCodeEditor) Resize(size fyne.Size) {
 	r.container.Resize(size)
 }
 
-// Tapped gère les clics pour passer en mode édition
+// Tapped gère les clics - maintenant toujours en mode édition avec coloration
 func (r *RichCodeEditor) Tapped(*fyne.PointEvent) {
-	if r.showHighlight {
-		r.EnableEditing()
-	}
+	// Mode édition avec coloration toujours actif
+	r.entry.FocusGained()
 }
