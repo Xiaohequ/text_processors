@@ -193,8 +193,8 @@ func CreateAddCustomProcessorDialog(parent fyne.Window) {
 	nameEntry := widget.NewEntry()
 	nameEntry.SetPlaceHolder("Nom du processeur (ex: Convertisseur Majuscules)")
 
-	// Utiliser l'éditeur avec coloration syntaxique temps réel
-	scriptEditor := NewCodeEditor() // Utilise SyntaxHighlightedEntry avec coloration active
+	// Utiliser l'éditeur avec coloration syntaxique
+	scriptEditor := NewCodeEditor()
 	scriptEditor.SetPlaceHolder(`Script JavaScript:
 function process(input) {
     // Votre code ici
