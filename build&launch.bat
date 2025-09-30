@@ -43,12 +43,10 @@ echo.
 echo SUCCESS: Artifact genere: %OUTPUT_DIR%\%OUTPUT_NAME%
 echo.
 
-cd /d "%~dp0"
-start "" ".\build\text_processors.exe"
-
 REM Afficher la taille du fichier
 if exist "%OUTPUT_DIR%\%OUTPUT_NAME%" (
     for %%I in ("%OUTPUT_DIR%\%OUTPUT_NAME%") do echo Taille du fichier: %%~zI octets
 )
 
-pause
+cd /d "%~dp0"
+start "" ".\build\text_processors.exe"

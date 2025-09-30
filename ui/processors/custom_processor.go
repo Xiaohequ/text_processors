@@ -3,6 +3,7 @@ package processors
 import (
 	"fmt"
 	"strings"
+	"text_processors/ui/widgets/codeeditor"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -50,17 +51,16 @@ func (cp *CustomProcessor) CreateConfigurationUI() fyne.CanvasObject {
 	nameEntry.SetPlaceHolder("Nom du processeur")
 	nameEntry.SetText(cp.viewModel.name)
 
-	scriptEntry := widget.NewMultiLineEntry()
+	scriptEntry := codeeditor.NewCodeEditor()
 	scriptEntry.SetPlaceHolder("Script JavaScript (fonction process(input) { return input; })")
 	scriptEntry.SetText(cp.viewModel.script)
-	scriptEntry.Wrapping = fyne.TextWrapWord
 	scriptEntry.Resize(fyne.NewSize(0, 100))
 
 	processBtn := widget.NewButton("Traiter", func() {
 		// Mettre à jour le nom et le script
 		cp.viewModel.name = nameEntry.Text
-		cp.viewModel.script = scriptEntry.Text
-		
+		cp.viewModel.script = scriptEntry.Text()
+
 		result, err := cp.viewModel.Process(input.Text)
 		if err != nil {
 			output.SetText(fmt.Sprintf("Erreur: %s", err.Error()))
@@ -79,10 +79,6 @@ func (cp *CustomProcessor) CreateConfigurationUI() fyne.CanvasObject {
 	// Mettre à jour le modèle quand les champs changent
 	nameEntry.OnChanged = func(s string) {
 		cp.viewModel.name = s
-	}
-	
-	scriptEntry.OnChanged = func(s string) {
-		cp.viewModel.script = s
 	}
 
 	topSection := container.NewVBox(
@@ -132,39 +128,39 @@ func (vm *CustomProcessorViewModel) Process(input string) (string, error) {
 
 	// Créer un runtime JavaScript
 	jsRuntime := goja.New()
-	
+
 	// Définir la fonction d'entrée
 	jsRuntime.Set("input", input)
-	
+
 	// Préparer le script avec une fonction wrapper si nécessaire
 	script := vm.script
 	if !strings.Contains(script, "function") && !strings.Contains(script, "=>") {
 		// Si ce n'est pas une fonction, on l'enveloppe
 		script = fmt.Sprintf("function process(input) { %s }", script)
 	}
-	
+
 	// Ajouter une fonction process par défaut si elle n'existe pas
 	if !strings.Contains(script, "process") {
 		script = script + "\nfunction process(input) { return input; }"
 	}
-	
+
 	// Exécuter le script
 	_, err := jsRuntime.RunString(script)
 	if err != nil {
 		return "", fmt.Errorf("erreur dans le script: %v", err)
 	}
-	
+
 	// Appeler la fonction process
 	processFunc, ok := goja.AssertFunction(jsRuntime.Get("process"))
 	if !ok {
 		return "", fmt.Errorf("fonction 'process' non trouvée dans le script")
 	}
-	
+
 	result, err := processFunc(goja.Undefined(), jsRuntime.ToValue(input))
 	if err != nil {
 		return "", fmt.Errorf("erreur lors de l'exécution: %v", err)
 	}
-	
+
 	resultStr := result.String()
 	vm.lastResult = resultStr
 	return resultStr, nil

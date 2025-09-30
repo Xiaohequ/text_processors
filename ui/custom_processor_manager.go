@@ -8,11 +8,13 @@ import (
 	"regexp"
 	"strings"
 
+	"text_processors/ui/processors"
+	"text_processors/ui/widgets/codeeditor"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	"text_processors/ui/processors"
 )
 
 // CustomProcessorDefinition représente la définition d'un processeur personnalisé
@@ -193,8 +195,8 @@ func CreateAddCustomProcessorDialog(parent fyne.Window) {
 	nameEntry := widget.NewEntry()
 	nameEntry.SetPlaceHolder("Nom du processeur (ex: Convertisseur Majuscules)")
 
-	// Utiliser l'éditeur avec coloration syntaxique
-	scriptEditor := NewCodeEditor()
+	// Utiliser l'éditeur avec coloration syntaxique (sous-package)
+	scriptEditor := codeeditor.NewCodeEditor()
 	scriptEditor.SetPlaceHolder(`Script JavaScript:
 function process(input) {
     // Votre code ici
@@ -252,7 +254,7 @@ return lines.map(function(line, index) {
 	// Widget pour afficher les erreurs en couleur
 	errorDisplay := widget.NewRichTextFromMarkdown("")
 	errorDisplay.Resize(fyne.NewSize(0, 60))
-	
+
 	// Fonction pour afficher les messages
 	showMessage := func(text string, isError bool) {
 		if isError {

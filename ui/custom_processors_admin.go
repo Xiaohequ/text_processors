@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 
+	"text_processors/ui/widgets/codeeditor"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
@@ -95,7 +97,7 @@ func CreateManageCustomProcessorsDialog(parent fyne.Window) {
 		current := procs[selectedIndex]
 		nameEntry := widget.NewEntry()
 		nameEntry.SetText(current.Name)
-		scriptEntry := NewCodeEditor()
+		scriptEntry := codeeditor.NewCodeEditor()
 		scriptEntry.SetPlaceHolder("Script JavaScript (fonction process(input) { return input; })")
 		scriptEntry.SetText(current.Script)
 		// UI du dialogue
@@ -145,12 +147,12 @@ func CreateManageCustomProcessorsDialog(parent fyne.Window) {
 	content := container.NewBorder(nil, actions, nil, nil, list)
 
 	dlg := dialog.NewCustom("Gérer les processeurs personnalisés", "Fermer", content, parent)
-	
+
 	// Adapter la taille du dialog de gestion à la taille de la fenêtre
 	windowSize := parent.Canvas().Size()
 	dialogWidth := windowSize.Width * 0.6
 	dialogHeight := windowSize.Height * 0.5
 	dlg.Resize(fyne.NewSize(dialogWidth, dialogHeight))
-	
+
 	dlg.Show()
 }

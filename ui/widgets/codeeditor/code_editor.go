@@ -1,4 +1,4 @@
-package ui
+package codeeditor
 
 import (
 	"image/color"
@@ -16,10 +16,11 @@ import (
 )
 
 // SyntaxHighlightedEntry est un widget d'entrée de texte avec coloration syntaxique
+// Exporté pour permettre l'utilisation et l'intégration dans d'autres packages.
 type SyntaxHighlightedEntry struct {
 	widget.BaseWidget
 	entry            *widget.Entry
-	coloredContainer *fyne.Container      // Container pour les objets Canvas.Text colorés
+	coloredContainer *fyne.Container // Container pour les objets Canvas.Text colorés
 	lexer            chroma.Lexer
 	formatter        chroma.Formatter
 	style            *chroma.Style
@@ -30,37 +31,38 @@ type SyntaxHighlightedEntry struct {
 // NewSyntaxHighlightedEntry crée un nouveau widget avec coloration syntaxique JavaScript
 func NewSyntaxHighlightedEntry() *SyntaxHighlightedEntry {
 	syntaxEntry := &SyntaxHighlightedEntry{}
-	
+
 	// Créer un Entry normal directement
 	normalEntry := widget.NewMultiLineEntry()
 	normalEntry.Wrapping = fyne.TextWrapOff
 	normalEntry.TextStyle = fyne.TextStyle{Monospace: true}
-	
+
 	// Stocker l'Entry normal directement
 	syntaxEntry.entry = normalEntry
-	
+
 	// Créer un container pour les objets Canvas.Text colorés
 	syntaxEntry.coloredContainer = container.NewWithoutLayout()
-	
+	syntaxEntry.coloredContainer.Resize(fyne.NewSize(100, 100))
+
 	// Configuration pour JavaScript
 	syntaxEntry.lexer = lexers.Get("javascript")
 	if syntaxEntry.lexer == nil {
 		syntaxEntry.lexer = lexers.Fallback
 	}
 	syntaxEntry.lexer = chroma.Coalesce(syntaxEntry.lexer)
-	
+
 	// Style adapté à Fyne
 	syntaxEntry.style = styles.Get("github")
 	if syntaxEntry.style == nil {
 		syntaxEntry.style = styles.Fallback
 	}
-	
+
 	// Formatter personnalisé pour Fyne
 	syntaxEntry.formatter = &fyneFormatter{}
-	
+
 	// Configurer les callbacks
 	normalEntry.OnChanged = syntaxEntry.onTextChanged
-	
+
 	syntaxEntry.ExtendBaseWidget(syntaxEntry)
 	return syntaxEntry
 }
@@ -82,7 +84,6 @@ func (s *SyntaxHighlightedEntry) SetPlaceHolder(text string) {
 	s.entry.SetPlaceHolder(text)
 }
 
-
 // Resize redimensionne le widget
 func (s *SyntaxHighlightedEntry) Resize(size fyne.Size) {
 	s.BaseWidget.Resize(size)
@@ -95,10 +96,11 @@ func (s *SyntaxHighlightedEntry) Resize(size fyne.Size) {
 func (s *SyntaxHighlightedEntry) CreateRenderer() fyne.WidgetRenderer {
 	s.entry.TextStyle = fyne.TextStyle{Monospace: true}
 	s.updateHighlighting()
-	
-	// Stack : coloration en dessous + Entry au-dessus
-	stack := container.NewStack(s.coloredContainer, s.entry)
-	
+
+	// Stack : coloration en dessous + Entry au-dessus (Entry semi-transparent)
+	trans := &simpleTransparentEntry{Entry: s.entry}
+	stack := container.NewStack(s.coloredContainer, trans)
+
 	return &transparentTextSyntaxRenderer{
 		stack:  stack,
 		entry:  s.entry,
@@ -120,10 +122,10 @@ func (s *SyntaxHighlightedEntry) updateHighlighting() {
 		s.coloredContainer.Refresh()
 		return
 	}
-	
+
 	// Vider les objets existants
 	s.coloredContainer.Objects = nil
-	
+
 	// Tokeniser le code JavaScript avec Chroma
 	iterator, err := s.lexer.Tokenise(nil, text)
 	if err != nil {
@@ -135,58 +137,58 @@ func (s *SyntaxHighlightedEntry) updateHighlighting() {
 		s.coloredContainer.Refresh()
 		return
 	}
-	
+
 	// Créer des objets Canvas.Text colorés pour chaque token
 	var xOffset float32 = 0
 	var yOffset float32 = 0
 	fontSize := theme.TextSize()
 	lineHeight := fontSize + 2 // Espacement entre les lignes
-	
+
 	for token := iterator(); token != chroma.EOF; token = iterator() {
 		value := token.Value
 		tokenType := token.Type
-		
+
 		if value == "" {
 			continue
 		}
-		
+
 		// Déterminer la couleur selon le type de token
-		var color color.Color = theme.ForegroundColor()
+		var col color.Color = theme.ForegroundColor()
 		textStyle := s.entry.TextStyle
-		
+
 		switch tokenType {
 		case chroma.Keyword, chroma.KeywordConstant, chroma.KeywordDeclaration,
-			 chroma.KeywordNamespace, chroma.KeywordPseudo, chroma.KeywordReserved, chroma.KeywordType:
-			color = theme.PrimaryColor()
+			chroma.KeywordNamespace, chroma.KeywordPseudo, chroma.KeywordReserved, chroma.KeywordType:
+			col = theme.PrimaryColor()
 			textStyle.Bold = true
 		case chroma.String, chroma.StringDouble, chroma.StringSingle:
-			color = theme.SuccessColor()
+			col = theme.SuccessColor()
 		case chroma.Comment, chroma.CommentSingle, chroma.CommentMultiline:
-			color = theme.DisabledColor()
+			col = theme.DisabledColor()
 			textStyle.Italic = true
 		case chroma.Number, chroma.NumberInteger, chroma.NumberFloat:
-			color = theme.WarningColor()
+			col = theme.WarningColor()
 		case chroma.Name, chroma.NameFunction:
-			color = theme.ErrorColor()
+			col = theme.ErrorColor()
 		case chroma.Operator:
-			color = theme.PrimaryColor()
+			col = theme.PrimaryColor()
 		}
-		
+
 		// Traiter les retours à la ligne dans le token
 		lines := strings.Split(value, "\n")
 		for i, line := range lines {
 			if line != "" {
 				// Créer un objet Canvas.Text pour cette ligne
-				textObj := canvas.NewText(line, color)
+				textObj := canvas.NewText(line, col)
 				textObj.TextStyle = textStyle
 				textObj.Move(fyne.NewPos(xOffset, yOffset))
 				s.coloredContainer.Objects = append(s.coloredContainer.Objects, textObj)
-				
+
 				// Avancer la position X
 				textWidth := fyne.MeasureText(line, fontSize, textStyle).Width
 				xOffset += textWidth
 			}
-			
+
 			// Passer à la ligne suivante si nécessaire
 			if i < len(lines)-1 {
 				yOffset += lineHeight
@@ -194,7 +196,7 @@ func (s *SyntaxHighlightedEntry) updateHighlighting() {
 			}
 		}
 	}
-	
+
 	s.coloredContainer.Refresh()
 }
 
@@ -221,14 +223,8 @@ func (r *transparentTextSyntaxRenderer) Refresh() {
 }
 
 func (r *transparentTextSyntaxRenderer) Objects() []fyne.CanvasObject {
-	// Remettre la superposition avec Stack
-	todoLabel := widget.NewLabel("TODO: Syntax highlighting")
-	todoLabel.TextStyle = fyne.TextStyle{Monospace: true, Italic: true}
-	
-	// Stack : Entry en arrière-plan + label TODO au premier plan
-	stack := container.NewStack(r.entry, todoLabel)
-	
-	return []fyne.CanvasObject{stack}
+	// Retourner le stack avec la coloration syntaxique
+	return []fyne.CanvasObject{r.stack}
 }
 
 func (r *transparentTextSyntaxRenderer) Destroy() {
@@ -269,7 +265,7 @@ func (r *simpleTransparentEntryRenderer) Refresh() {
 func (r *simpleTransparentEntryRenderer) Objects() []fyne.CanvasObject {
 	objects := r.baseRenderer.Objects()
 	var result []fyne.CanvasObject
-	
+
 	for _, obj := range objects {
 		if text, ok := obj.(*canvas.Text); ok {
 			// Rendre le texte plus visible pour l'édition
@@ -284,7 +280,7 @@ func (r *simpleTransparentEntryRenderer) Objects() []fyne.CanvasObject {
 			result = append(result, obj)
 		}
 	}
-	
+
 	return result
 }
 
@@ -296,7 +292,6 @@ func (r *simpleTransparentEntryRenderer) Destroy() {
 func NewCodeEditor() *SyntaxHighlightedEntry {
 	editor := NewSyntaxHighlightedEntry()
 	editor.entry.TextStyle = fyne.TextStyle{Monospace: true}
-	
 	return editor
 }
 
@@ -307,3 +302,4 @@ func (f *fyneFormatter) Format(w io.Writer, style *chroma.Style, iterator chroma
 	// Implémentation simplifiée - pour le moment on ne fait rien
 	return nil
 }
+
